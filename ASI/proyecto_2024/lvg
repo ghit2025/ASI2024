@@ -1,32 +1,32 @@
 #!/usr/bin/env bash
-set -euo pipefail
-source "$(dirname "$0")/prologue" "$@"
-[[ $EUID -eq 0 ]] || exit 1
+# shellcheck disable=SC2086,SC2046
+
+[[ $(id -u) -eq 0 ]] || exit 1
+. "$(dirname "$0")/prologue" "$@"
 
 state=${state:-present}
 [[ $state == present || $state == absent ]] || exit 2
-[[ -n ${vg:-} ]]                           || exit 2
-[[ $state == absent || -n ${pvs:-} ]]      || exit 2
+[[ -n ${vg:-} ]] || exit 2
+[[ $state == absent || -n ${pvs:-} ]] || exit 2   # pvs solo obliga en present
+
+pkg_installed() { dpkg -s "$1" &>/dev/null; }
+block_ok()      { [[ -b $1 ]]; }
 
 pkg_installed lvm2 || exit 3
 
-vg_exists() { vgs --noheadings "$1" &>/dev/null; }
-
 if [[ $state == present ]]; then
-    if vg_exists "$vg"; then
-        exit 128
-    fi
-    IFS=',' read -ra devs <<<"$pvs"
-    for d in "${devs[@]}"; do
-        [[ -b $d ]] || exit 4          # no es dispositivo de bloques
-    done
+    vgdisplay "$vg" &>/dev/null && exit 128
+
+    # normaliza: cambia comas por espacios y carga en array
+    pvs_list=${pvs//,/ }
+    read -ra devs <<< "$pvs_list"
+
+    for d in "${devs[@]}"; do block_ok "$d" || exit 4; done
+
     vgcreate "$vg" "${devs[@]}" &>/dev/null || exit 5
     exit 0
 else
-    # absent
-    if ! vg_exists "$vg"; then
-        exit 128
-    fi
+    vgdisplay "$vg" &>/dev/null || exit 128
     vgremove -y "$vg" &>/dev/null || exit 6
     exit 0
 fi
