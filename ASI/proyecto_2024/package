@@ -1,0 +1,74 @@
+#!/bin/bash
+
+# módulo que instala (o desinstala) los paquetes especificados
+# actualizando la caché de metadatos si así se indica
+
+# argumentos:
+#       "name": la lista con los nombres de los paquetes (obligatorio)
+#       "state": "present"|"absent" (por defecto, "present")
+#	"update-cache": "true"|"false" (por defecto, "false"; ignorado si "absent")
+
+# valor devuelto:
+#       0 OK con cambios
+#       128 OK sin cambios
+#       1 ejecución sin ser superusuario
+#       2 error en argumentos
+#       3 error algún paquete a instalar o desinstalar no existe
+#       4 error en mandato que crea el usuario
+#       5 error en mandato que elimina el usuario
+
+test $(id -u) = 0 || exit 1 # debe ejecutarse como superusuario
+
+. $(dirname $0)/prologue # incluye el prólogo
+
+#!/usr/bin/env bash
+set -euo pipefail
+. "$(dirname "$0")/prologue" "$@"
+
+# ---------- 1.  Comprobaciones básicas ----------
+(( EUID == 0 )) || exit 1          # debe ser sudo/root
+
+# argumentos por defecto
+state=${state:-present}
+update_cache=${update_cache:-false}
+
+# name es obligatorio
+if [[ -z "${name:-}" ]]; then
+  exit 2
+fi
+
+# Transformar la lista en array (IFS = Internal Field Separator)
+IFS=' ' read -r -a pkgs <<<"${name//,/ }"
+
+# ---------- 2.  Verificar que los paquetes existen ----------
+for p in "${pkgs[@]}"; do
+  if ! apt-cache show "$p" &>/dev/null; then   # paquete desconocido
+    exit 3
+  fi
+done
+
+# ---------- 3.  Calcular si hay algo que hacer ----------
+need_change=false
+for p in "${pkgs[@]}"; do
+  if [[ "$state" == "present" ]]; then
+    dpkg -s "$p" &>/dev/null || need_change=true
+  else    # state == absent
+    dpkg -s "$p" &>/dev/null && need_change=true
+  fi
+done
+
+$need_change || exit 128            # todo ya estaba como querías
+
+# ---------- 4.  Ejecutar de forma atómica ----------
+if [[ "$state" == "present" ]]; then
+  [[ "$update_cache" == "true" ]] && apt-get update -qq
+  if ! apt-get install -y "${pkgs[@]}" &>/dev/null; then
+    exit 4
+  fi
+else
+  if ! apt-get purge -y "${pkgs[@]}" &>/dev/null; then
+    exit 5
+  fi
+fi
+
+exit 0

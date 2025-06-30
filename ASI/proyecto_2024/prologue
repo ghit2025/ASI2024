@@ -1,0 +1,15 @@
+#!/bin/bash
+# prólogo común: crea variables a partir de los argumentos;
+# se incluirá al principio de todos los módulos;
+# puede usar el script test_prologue para enteder su funcionamiento
+for arg
+do
+	IFSORG="$IFS"
+	IFS== splitargs=($arg)
+	var=${splitargs[0]}
+	values=${splitargs[1]}
+	test $values || continue
+	IFS=, splitvals=($values) 
+	IFS="$IFSORG"
+	eval $var='${splitvals[@]}'
+done

@@ -1,0 +1,27 @@
+#!/bin/bash
+
+# módulo que crea (o elimina) un grupo de volúmenes (VG)
+# a partir de un conjunto de dispositivos de bloques
+
+# argumentos:
+#	"vg": nombre del VG (obligatorio)
+#       "state": "present"|"absent" (por defecto, "present")
+#	"pvs": lista de dispositivos de bloques (obligatorio si "present")
+
+# valor devuelto:
+#       0 OK con cambios
+#       128 OK sin cambios
+#       1 ejecución sin ser superusuario
+#       2 error en argumentos
+#       3 error por no estar instalado el paquete requerido
+#       4 error porque alguno de los dispositivos no existe o no es de bloques
+#       5 error en mandato que crea el VG
+#       6 error en mandato que elimina el VG
+
+# requisitos:
+# 	- debe estar instalado previamente el paquete lvm2
+
+test $(id -u) = 0 || exit 1 # debe ejecutarse como superusuario
+
+. $(dirname $0)/prologue # incluye el prólogo
+

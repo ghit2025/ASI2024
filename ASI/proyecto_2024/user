@@ -1,0 +1,39 @@
+#!/bin/bash
+
+# módulo que crea (o elimina) un usuario con una contraseña vacía
+
+# argumentos:
+#	"name": el nombre del usuario (obligatorio)
+#	"state": "present"|"absent" (por defecto, "present")
+
+# valor devuelto:
+# 	0 OK sin cambios
+# 	128 OK con cambios
+# 	1 ejecución sin ser superusuario
+#	2 error en argumentos
+#	3 error en mandato que crea el usuario
+#	4 error en mandato que elimina el usuario
+
+test $(id -u) = 0 || exit 1 # debe ejecutarse como superusuario
+
+. $(dirname $0)/prologue # incluye el prólogo
+
+# comprueba argumentos
+test $name || exit 2  # name es obligatorio
+state=${state:-"present"} # valor por defecto si no se especifica
+# comprueba que son correctos los valores de "state"
+test $state = "present" -o $state = "absent" || exit 2
+
+getent passwd $name &> /dev/null # comprueba si existe
+existe=$?
+if test $state = "present"
+then
+	test $existe -eq 0 && exit 128 # sin cambios
+	useradd -m -s /bin/bash $name &> /dev/null || exit 3
+	# con contraseña vacía: solo pulsar "enter"
+	echo "$name:U6aMy0wojraho" | chpasswd -e
+else
+	test $existe -ne 0 && exit 128 # sin cambios
+	userdel -f -r $name &> /dev/null  || exit 4
+fi 
+exit 0 # OK con cambios

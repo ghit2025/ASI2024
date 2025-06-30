@@ -1,0 +1,76 @@
+#!/bin/bash
+
+# módulo que crea (o elimina) un montaje;
+# simplificado: solo se ocupa del mount, no actualizando /etc/fstab;
+# dificultad:
+# 	- Linux permite montar varios dispositivos sobre el mismo directorio;
+# 	- Linux permite montar un dispositivo sobre varios directorios;
+#	En umount solo se puede especificar dispositivo o directorio
+#	eliminándose el último montaje sobre el mismo
+
+# argumentos:
+#	"path": directorio donde se monta (obligatorio si "present"; si "absent", obligatorio "path" o "src", pero solo debe aparecer uno)
+#	"src": dispositivo que se monta (obligatorio si "present")
+#	"fstype": tipo de sistema de ficheros (obligatorio si "present")
+#	"mkdir": al montar, crea el directorio si no existe; "true"|"false" (por defecto, "false")
+#	"rmdir": al desmontar, elimina el directorio si existe; "true"|"false" (por defecto, "false")
+#       "state": "present"|"absent" (por defecto, "present")
+
+# valor devuelto
+#       0 OK sin cambios
+#       128 OK con cambios
+#       1 ejecución sin ser superusuario
+#       2 error en argumentos
+#       3 error al crear el directorio
+#       4 error en mandato de montaje
+#       5 error en mandato de desmontaje
+
+test $(id -u) = 0 || exit 1 # debe ejecutarse como superusuario
+
+. $(dirname $0)/prologue # incluye el prólogo
+
+# comprueba argumentos
+state=${state:-"present"} # valor por defecto si no se especifica
+mkdir=${mkdir:-"false"} # valor por defecto si no se especifica
+rmdir=${rmdir:-"false"} # valor por defecto si no se especifica
+test $state = "present" -o $state = "absent" || exit 2
+test $mkdir = "true" -o $mkdir = "false" || exit 2
+test $rmdir = "true" -o $rmdir = "false" || exit 2
+# comprueba argumentos obligatorios de "present"
+test $state = "present" && test ! "$path" -o ! "$src" -o ! "$fstype" && exit 2
+# comprueba argumentos obligatorios de "absent" ("$src" o "$path" pero no ambos)
+test $state = "absent" && test ! "$src" -a ! "$path" && exit 2
+test $state = "absent" && test "$src" -a "$path" && exit 2
+
+if test $state = "present"
+then
+	# si ese montaje ya existe, no hacer nada
+	findmnt -S "$src" -M "$path" &> /dev/null && exit 128 # sin cambios
+	newdir="false"
+	# se crea el directorio si no existe y se ha pedido hacerlo
+	if test $mkdir = "true" && test ! -d "$path"
+	then
+		mkdir $path &> /dev/null || exit 3
+		newdir="true"
+	fi
+	# se procede con el montaje
+	mount -t $fstype $src $path &> /dev/null || { test $newdir = "true" && rmdir $path &> /dev/null; exit 4; } # si error y se creó directorio, lo borro
+else
+	changed="false"
+	# desmonta especificando directorio de montaje
+	if test $path && findmnt -M "$path" &> /dev/null
+	then
+		umount $path &> /dev/null || exit 5
+		changed="true"
+	fi
+	# desmonta especificando dispositivo montado
+	if test $src && findmnt -S "$src" &> /dev/null 
+	then
+		umount $src &> /dev/null || exit 5
+		changed="true"
+	fi
+	test $changed = "false" && exit 128 # OK sin cambios
+	# si solicitado, elimina directorio de montaje
+	test $rmdir = "true" && rmdir $path &> /dev/null 
+fi
+exit 0 # OK con cambios

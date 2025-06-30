@@ -1,0 +1,6 @@
+10.0.2.5
+instala_lvm package name=lvm2
+crea_VG lvg vg=VG1 pvs=/dev/sdb1,/dev/sdb2
+crea_LV lvol lv=LV1 vg=VG1 size=768M
+crea_SF_sobre_LV filesystem dev=/dev/mapper/VG1-LV1 fstype=ext4
+monta_LV mount path=/mnt src=/dev/mapper/VG1-LV1 fstype=ext4

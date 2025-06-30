@@ -1,0 +1,30 @@
+#!/bin/bash
+
+# módulo que crea (o elimina) un volumen lógico dentro de un grupo de volúmenes (VG)
+
+# argumentos:
+#       "lv": nombre del LV (obligatorio)
+#       "vg": nombre del VG (obligatorio)
+#       "state": "present"|"absent" (por defecto, "present")
+#       "size": tamaño del LV (obligatorio si "present"); puede usarse K, M, G, T, P...
+
+# valor devuelto:
+#       0 OK con cambios
+#       128 OK sin cambios
+#       1 ejecución sin ser superusuario
+#       2 error en argumentos
+#       3 error por no estar instalado el paquete requerido
+#       4 error porque no existe el VG
+#       5 error en mandato que crea el LV
+#       6 error en mandato que elimina el LV
+
+# requisitos:
+#       - debe estar instalado previamente el paquete lvm2
+
+test $(id -u) = 0 || exit 1 # debe ejecutarse como superusuario
+
+. $(dirname $0)/prologue # incluye el prólogo
+
+# convertir el tamaño para que sea en bytes
+test $size && size_B=$(numfmt --from=iec $size)
+
