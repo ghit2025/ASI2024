@@ -1,27 +1,32 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -euo pipefail
+source "$(dirname "$0")/prologue" "$@"
+[[ $EUID -eq 0 ]] || exit 1
 
-# módulo que crea (o elimina) un grupo de volúmenes (VG)
-# a partir de un conjunto de dispositivos de bloques
+state=${state:-present}
+[[ $state == present || $state == absent ]] || exit 2
+[[ -n ${vg:-} ]]                           || exit 2
+[[ $state == absent || -n ${pvs:-} ]]      || exit 2
 
-# argumentos:
-#	"vg": nombre del VG (obligatorio)
-#       "state": "present"|"absent" (por defecto, "present")
-#	"pvs": lista de dispositivos de bloques (obligatorio si "present")
+pkg_installed lvm2 || exit 3
 
-# valor devuelto:
-#       0 OK con cambios
-#       128 OK sin cambios
-#       1 ejecución sin ser superusuario
-#       2 error en argumentos
-#       3 error por no estar instalado el paquete requerido
-#       4 error porque alguno de los dispositivos no existe o no es de bloques
-#       5 error en mandato que crea el VG
-#       6 error en mandato que elimina el VG
+vg_exists() { vgs --noheadings "$1" &>/dev/null; }
 
-# requisitos:
-# 	- debe estar instalado previamente el paquete lvm2
-
-test $(id -u) = 0 || exit 1 # debe ejecutarse como superusuario
-
-. $(dirname $0)/prologue # incluye el prólogo
-
+if [[ $state == present ]]; then
+    if vg_exists "$vg"; then
+        exit 128
+    fi
+    IFS=',' read -ra devs <<<"$pvs"
+    for d in "${devs[@]}"; do
+        [[ -b $d ]] || exit 4          # no es dispositivo de bloques
+    done
+    vgcreate "$vg" "${devs[@]}" &>/dev/null || exit 5
+    exit 0
+else
+    # absent
+    if ! vg_exists "$vg"; then
+        exit 128
+    fi
+    vgremove -y "$vg" &>/dev/null || exit 6
+    exit 0
+fi
