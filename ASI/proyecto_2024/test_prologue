@@ -1,0 +1,12 @@
+#!/bin/bash
+
+echo 'se ejecuta con: var1=val1 var2=val2,val3'
+set var2=val2,val3
+set var1=val1 var2=val2,val3
+
+# se incluye el prólogo
+. $(dirname $0)/prologue
+
+echo "resultado después del prologo"
+echo var1 $var1
+echo var2 $var2

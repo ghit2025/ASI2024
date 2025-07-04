@@ -1,0 +1,35 @@
+#!/bin/bash
+#!/usr/bin/env bash
+set -uo pipefail                         
+
+[[ $# -eq 3 ]] || { echo "uso: mansible \"hosts\" modulo \"arg1=...\"" >&2; exit 1; }
+
+hosts=$1
+mod=$2
+args=$3
+modfile=$(basename "$mod")
+
+for h in $hosts; do
+    # 1. ssh responde
+    if ! ssh -o BatchMode=yes -o ConnectTimeout=3 "$h" true &>/dev/null; then
+        echo "$h | UNREACHABLE"
+        continue
+    fi
+
+    # 2. copia módulo y prologue
+    if ! scp -q "$mod" prologue "$h:/tmp/" ; then
+        echo "$h | UNREACHABLE"
+        continue
+    fi
+
+    # 3. ejecuta módulo (sudo -n para que no pida pass)
+    ssh -n "$h" sudo -n /tmp/"$modfile" $args
+    rc=$?
+
+    case $rc in
+        0)   echo "$h | CHANGED"  ;;
+        128) echo "$h | SUCCESS"  ;;
+        *)   echo "$h | FAILED (rc=$rc)" ;;
+    esac
+done
+

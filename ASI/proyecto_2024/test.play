@@ -1,0 +1,6 @@
+10.0.2.15 10.0.2.5 10.0.2.6
+crea_usuario user name=test_user state=present
+recrea_usuario user name=test_user state=present
+crea_usuario_error user name=12345 state=present
+elimina_usuario user name=test_user state=absent
+reelimina_usuario user name=test_user state=absent

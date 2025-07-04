@@ -1,0 +1,6 @@
+localhost
+instala_lvm package name=lvm2
+crea_VG     lvg  vg=VG1 pvs=/dev/loop29,/dev/loop34
+crea_LV     lvol lv=LV1 vg=VG1 size=768M
+crea_SF     filesystem dev=/dev/mapper/VG1-LV1 fstype=ext4
+monta_LV    mount path=/mnt src=/dev/mapper/VG1-LV1 fstype=ext4

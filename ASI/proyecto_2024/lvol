@@ -1,0 +1,63 @@
+#!/bin/bash
+
+# módulo que crea (o elimina) un volumen lógico dentro de un grupo de volúmenes (VG)
+
+# argumentos:
+#       "lv": nombre del LV (obligatorio)
+#       "vg": nombre del VG (obligatorio)
+#       "state": "present"|"absent" (por defecto, "present")
+#       "size": tamaño del LV (obligatorio si "present"); puede usarse K, M, G, T, P...
+
+# valor devuelto:
+#       0 OK con cambios
+#       128 OK sin cambios
+#       1 ejecución sin ser superusuario
+#       2 error en argumentos
+#       3 error por no estar instalado el paquete requerido
+#       4 error porque no existe el VG
+#       5 error en mandato que crea el LV
+#       6 error en mandato que elimina el LV
+
+# requisitos:
+#       - debe estar instalado previamente el paquete lvm2
+
+#!/usr/bin/env bash
+# shellcheck disable=SC2086,SC2046
+
+[[ $(id -u) -eq 0 ]] || exit 1
+. "$(dirname "$0")/prologue" "$@"
+
+state=${state:-present}
+[[ $state == present || $state == absent ]] || exit 2
+[[ -n ${vg:-} && -n ${lv:-} ]] || exit 2
+[[ $state == absent || -n ${size:-} ]] || exit 2
+
+pkg_installed() { dpkg -s lvm2 &>/dev/null; }
+pkg_installed || exit 3
+
+lv_path="/dev/$vg/$lv"
+
+# convierte SIZE (iec) a bytes → wanted
+wanted=$(numfmt --from=iec "${size:-0}")
+
+if [[ $state == present ]]; then
+    # comprueba que el VG exista
+    vgdisplay "$vg" &>/dev/null || exit 4
+
+    if lvs --noheadings "$lv_path" &>/dev/null; then
+        current=$(lvs -o lv_size --units B --nosuffix --noheadings "$lv_path" | tr -d ' ')
+        if [[ $current -eq $wanted ]]; then
+            exit 128                     # ya existe con mismo tamaño
+        fi
+        # redimensiona
+        lvresize -y -L "$size" "$lv_path" &>/dev/null || exit 5
+        exit 0
+    fi
+    # crea desde cero
+    lvcreate -y -n "$lv" -L "$size" "$vg" &>/dev/null || exit 5
+    exit 0
+else
+    lvs --noheadings "$lv_path" &>/dev/null || exit 128
+    lvremove -y "$lv_path" &>/dev/null || exit 6
+    exit 0
+fi

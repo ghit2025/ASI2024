@@ -1,0 +1,42 @@
+#!/bin/bash
+
+# módulo que crea (o elimina) sistemas de ficheros
+
+# argumentos:
+#       "dev": el dispositivo de bloques (obligatorio)
+#       "state": "present"|"absent" (por defecto, "present")
+# 	"fstype": tipo de sistema de ficheros (obligatorio si "present")
+
+# valor devuelto:
+#       0 OK sin cambios
+#       128 OK con cambios
+#       1 ejecución sin ser superusuario
+#       2 error en argumentos
+#       3 error en mandato que crea el usuario
+#       4 error en mandato que elimina el usuario
+
+test $(id -u) = 0 || exit 1 # debe ejecutarse como superusuario
+
+. $(dirname $0)/prologue # incluye el prólogo
+
+# comprueba argumentos
+state=${state:-"present"} # valor por defecto si no especificada
+test $state = "present" -o $state = "absent" || exit 2
+test $state = "present" && test ! "$fstype" && exit 2 
+
+lsblk $dev &>/dev/null || exit 3 # no es un dispositibo de bloques
+
+# comprueba si tiene un sistemaa de fichero y, si es así, obtiene cuál
+curr_fstype=$(lsblk -o FSTYPE $dev 2>/dev/null | grep -v FSTYPE)
+
+test x$curr_fstype = x$fstype  && test $state = "present" && exit 128 # ya tiene ese SF
+test ! $curr_fstype  && test $state = "absent" && exit 128 # no tiene sistema de ficheros
+
+if test $state = "present"
+then
+        mkfs -t $fstype $dev <<< "yes" &> /dev/null || exit 3
+else
+	# elimina el sistema de ficheros
+	wipefs -af $dev &> /dev/null || exit 4
+fi
+exit 0

@@ -1,0 +1,60 @@
+#!/bin/bash
+
+# módulo que instala (o desinstala) los paquetes especificados
+# actualizando la caché de metadatos si así se indica
+
+# argumentos:
+#       "name": la lista con los nombres de los paquetes (obligatorio)
+#       "state": "present"|"absent" (por defecto, "present")
+#	"update-cache": "true"|"false" (por defecto, "false"; ignorado si "absent")
+
+# valor devuelto:
+#       0 OK con cambios
+#       128 OK sin cambios
+#       1 ejecución sin ser superusuario
+#       2 error en argumentos
+#       3 error algún paquete a instalar o desinstalar no existe
+#       4 error en mandato que crea el usuario
+#       5 error en mandato que elimina el usuario
+
+#!/usr/bin/env bash
+#!/usr/bin/env bash
+# shellcheck disable=SC2086,SC2046
+
+# 1. comprobaciones básicas
+[[ $(id -u) -eq 0 ]] || exit 1
+. "$(dirname "$0")/prologue" "$@"
+
+state=${state:-present}
+update_cache=${update_cache:-false}
+[[ $state == present || $state == absent ]] || exit 2
+[[ -n ${name:-} ]] || exit 2
+
+# 2. lista de paquetes (prologue ya los separa por espacios)
+read -ra pkgs <<< "$name"
+
+pkg_exists() { apt-cache show "$1" &>/dev/null; }
+for p in "${pkgs[@]}"; do pkg_exists "$p" || exit 3; done
+
+do_update() {
+    if [[ $update_cache == true ]]; then
+        apt-get -qq update || return 1
+    fi
+    return 0
+}
+
+if [[ $state == present ]]; then
+    if dpkg -s "${pkgs[@]}" &>/dev/null; then
+        do_update || exit 4    # solo falla si update explícito devuelve error
+        exit 128
+    fi
+    do_update || exit 4
+    apt-get -qq install -y "${pkgs[@]}" || exit 4
+    exit 0
+else
+    if ! dpkg -s "${pkgs[@]}" &>/dev/null; then
+        exit 128
+    fi
+    apt-get -qq purge -y "${pkgs[@]}" || exit 5
+    exit 0
+fi

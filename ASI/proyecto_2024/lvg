@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# shellcheck disable=SC2086,SC2046
+
+[[ $(id -u) -eq 0 ]] || exit 1
+. "$(dirname "$0")/prologue" "$@"
+
+state=${state:-present}
+[[ $state == present || $state == absent ]] || exit 2
+[[ -n ${vg:-} ]] || exit 2
+[[ $state == absent || -n ${pvs:-} ]] || exit 2   # pvs solo obliga en present
+
+pkg_installed() { dpkg -s "$1" &>/dev/null; }
+block_ok()      { [[ -b $1 ]]; }
+
+pkg_installed lvm2 || exit 3
+
+if [[ $state == present ]]; then
+    vgdisplay "$vg" &>/dev/null && exit 128
+
+    # normaliza: cambia comas por espacios y carga en array
+    pvs_list=${pvs//,/ }
+    read -ra devs <<< "$pvs_list"
+
+    for d in "${devs[@]}"; do block_ok "$d" || exit 4; done
+
+    vgcreate "$vg" "${devs[@]}" &>/dev/null || exit 5
+    exit 0
+else
+    vgdisplay "$vg" &>/dev/null || exit 128
+    vgremove -y "$vg" &>/dev/null || exit 6
+    exit 0
+fi
